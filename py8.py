@@ -367,6 +367,65 @@ class FeedbackSystem:
         except Exception as e:
             st.error(f"Error sending feedback email: {str(e)}")
             return False
+    
+    @staticmethod
+    def send_welcome_email(name: str, email: str, account_number: str, account_type: str):
+        """Send welcome email to new account holders"""
+        try:
+            # Email configuration
+            sender_email = "cravinsanjay22@gmail.com"
+            sender_password = "gror taom ymiq dhat"
+            
+            # Create message
+            message = MIMEMultipart()
+            message["From"] = sender_email
+            message["To"] = email
+            message["Subject"] = "Welcome to CGBank - Your Account is Ready!"
+            
+            # Email body
+            body = f"""
+            <h2>Welcome to CGBank, {name}!</h2>
+            <p>We're thrilled to have you as our valued customer. Your account has been successfully created.</p>
+            
+            <h3>Your Account Details:</h3>
+            <p><strong>Account Holder:</strong> {name}</p>
+            <p><strong>Account Number:</strong> {account_number}</p>
+            <p><strong>Account Type:</strong> {account_type}</p>
+            <p><strong>Initial Balance:</strong> ₹1,000.00</p>
+            
+            <h3>Getting Started</h3>
+            <p>Here's what you can do next:</p>
+            <ul>
+                <li>Login to your account using your credentials</li>
+                <li>Explore our digital banking services</li>
+                <li>Visit any branch for personalized assistance</li>
+            </ul>
+            
+            <h3>Customer Support</h3>
+            <p>If you have any questions, our customer support team is available 24/7:</p>
+            <ul>
+                <li>Helpline: 1800-123-4506</li>
+                <li>Email: support@cgbank.com</li>
+                <li>Branch Locator: https://www.cgbank.com/branches</li>
+            </ul>
+            
+            <p>Thank you for choosing CGBank as your financial partner!</p>
+            
+            <p><strong>The CGBank Team</strong></p>
+            """
+            
+            message.attach(MIMEText(body, "html"))
+            
+            # Send email
+            with smtplib.SMTP("smtp.gmail.com", 587) as server:
+                server.starttls()
+                server.login(sender_email, sender_password)
+                server.sendmail(sender_email, email, message.as_string())
+                
+            return True
+        except Exception as e:
+            print(f"Error sending welcome email: {str(e)}")
+            return False
 
 class CGBankDatabase:
     """Class to interact with the bank data"""
@@ -421,7 +480,7 @@ class CGBankDatabase:
     
     @staticmethod
     def create_user(username: str, password: str, user_data: Dict[str, Any]) -> bool:
-        """Create a new user account"""
+        """Create a new user account and send welcome email"""
         if CGBankDatabase.get_user(username):
             return False  # User already exists
             
@@ -444,7 +503,21 @@ class CGBankDatabase:
         BANK_DATA['users'][username.lower()] = user_data
         
         # Save to JSON file
-        return CGBankDatabase._save_data()
+        if CGBankDatabase._save_data():
+            # Send welcome email if email is provided
+            if 'email' in user_data and user_data['email']:
+                try:
+                    FeedbackSystem.send_welcome_email(
+                        name=user_data['name'],
+                        email=user_data['email'],
+                        account_number=user_data['account_number'],
+                        account_type=user_data['account_type']
+                    )
+                except Exception as e:
+                    print(f"Error sending welcome email: {e}")
+                    # Don't fail account creation if email fails
+            return True
+        return False
     
     @staticmethod
     def get_bank_info() -> Dict[str, Any]:
@@ -671,7 +744,7 @@ class RexaBot:
             'bill_payment': ['pay bill', 'bill payment', 'utility bill', 'electricity bill', 
                            'water bill', 'gas bill', 'phone bill', 'internet bill',
                            'credit card bill', 'mobile recharge'],
-            'bank_info': ['about cgbank', 'bank information', 'bank details', 'what is cgbank', 
+            'bank_info': ['about cgbank', 'bank information', 'bank details', 'cgbank', 
                          'bank services', 'products offered', 'bank features', 'branch locations','branches',
                          'contact bank', 'bank timings'],
             'loan_info': ['loan', 'borrow', 'credit', 'home loan', 'personal loan', 'car loan',
@@ -812,8 +885,8 @@ class RexaBot:
                f"**Amount:** {loan_data['amount']}\n"
                f"**Interest Rate:** {loan_data['interest']}\n"
                f"**Tenure:** {loan_data['tenure']}\n\n"
-               f"**Eligibility Criteria:**\n{eligibility}\n\n"
-               f"**Required Documents:**\n{documents}\n\n"
+               f"**Eligibility Criteria:**{loan_data['eligibility']}\n\n"
+               f"**Required Documents:**{loan_data['documents']}\n\n"
                f"**How to Apply:** {loan_data.get('application', 'Visit any CGBank branch to apply!')}")
     
     def _get_all_loans_info(self) -> str:
@@ -861,9 +934,9 @@ class RexaBot:
         documents = "\n".join([f"- {doc}" for doc in scheme_data.get('documents', [])])
         
         return (f"**{scheme_data['name']}**\n\n"
-               f"**Benefits:**\n{benefits}\n\n"
+               f"**Benefits:**{scheme_data['benefits']}\n\n"
                f"**Eligibility:** {scheme_data['eligibility']}\n\n"
-               f"**Required Documents:**\n{documents}\n\n"
+               f"**Required Documents:**{scheme_data['documents']}\n\n"
                f"**How to Apply:** {scheme_data['application']}")
     
     def _get_all_schemes_info(self) -> str:
@@ -873,6 +946,8 @@ class RexaBot:
         for scheme in schemes.values():
             response += f"**{scheme['name']}**\n"
             response += f"- Eligibility: {scheme['eligibility']}\n\n"
+            response += f"- Benefits: {scheme['benefits']}\n\n"
+            response += f"- Documents: {scheme['documents']}\n\n"
         
         response += "\nYou can ask about specific schemes like 'Modi Scheme', 'PM Farmer Scheme', or 'Thangamagal Scheme' for more details."
         return response
@@ -2353,6 +2428,8 @@ class CGBankApp:
                     st.success("""
                     Your account has been created successfully!
                     
+                    A welcome email has been sent to your registered email address.
+                    
                     You can now login with your username and password.
                     
                     Thank you for choosing CGBank!
@@ -2390,9 +2467,9 @@ class CGBankApp:
         with col2:
             st.markdown("""
             <div class="account-card">
-                <h3>📊 This Month</h3>
-                <h2>₹2,340.50</h2>
-                <p>↑ +12.5%</p>
+                <h3>📊 CG BANK</h3>
+                <li> 🌐 ↑ India's Leading Partner</li>
+                <p> Where Your Future Feels Secure🏦</p>
             </div>
             """, unsafe_allow_html=True)
         
@@ -2421,10 +2498,10 @@ class CGBankApp:
         
         col1, col2 = st.columns(2)
         with col1:
-            st.markdown("### 📈 Spending Overview")
+            st.markdown("### 📈 OUR Success ↑")
             categories = CGBankDatabase.get_spending_categories(st.session_state.current_user)
             df = pd.DataFrame(categories)
-            fig = px.pie(df, values='amount', names='name', title="Monthly Spending by Category")
+            fig = px.pie(df, values='amount', names='name', title="Yearly ↑ Growth")
             st.plotly_chart(fig, use_container_width=True)
         
         with col2:
@@ -3049,7 +3126,7 @@ class CGBankApp:
                     st.success("Netbanking enabled successfully! You can now access all online services.")
                     st.rerun()
                 else:
-                    st.error("Failed to enable netbanking. Please try again or visit a branch.")
+                    st.error("Failed to enable netbanking. Please try again.")
             return
         
         st.success("✅ Netbanking is enabled for your account. You can access all features below.")
@@ -3100,4 +3177,3 @@ class CGBankApp:
 if __name__ == "__main__":
     app = CGBankApp()
     app.run()
-            
